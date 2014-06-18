@@ -25,7 +25,7 @@
 #  Only the first 2 variables should require regular maintenance, i.e. BoostVersion & BoostSHA1.   #
 #                                                                                                  #
 #  If USE_BOOST_CACHE is set, boost is downloaded, extracted and built to a directory outside of   #
-#  the MaidSafe build tree.  The chosen directory can be set in BOOST_CACHE_DIR, or if this is    #
+#  the MaidSafe build tree.  The chosen directory can be set in BOOST_CACHE_DIR, or if this is     #
 #  empty, an appropriate default is chosen for the given platform.                                 #
 #                                                                                                  #
 #  Variables set and cached by this module are:                                                    #
@@ -33,6 +33,7 @@
 #    variables defining the libraries, e.g. BoostDateTimeLibs, BoostFilesystemLibs.                #
 #                                                                                                  #
 #==================================================================================================#
+
 
 set(BoostVersion 1.55.0)
 set(BoostSHA1 cef9a0cc7084b1d639e06cd3bc34e4251524c840)
@@ -44,6 +45,7 @@ string(REGEX REPLACE "beta\\.([0-9])$" "beta\\1" BoostFolderName ${BoostVersion}
 string(REPLACE "." "_" BoostFolderName ${BoostFolderName})
 set(BoostFolderName boost_${BoostFolderName})
 
+# If user wants to use a cache copy of Boost, get the path to this location.
 if(USE_BOOST_CACHE)
   if(BOOST_CACHE_DIR)
     file(TO_CMAKE_PATH "${BOOST_CACHE_DIR}" BoostCacheDir)
@@ -57,6 +59,7 @@ if(USE_BOOST_CACHE)
   endif()
 endif()
 
+# If the cache directory doesn't exist, fall back to use the build root.
 if(NOT IS_DIRECTORY "${BoostCacheDir}")
   if(BOOST_CACHE_DIR)
     set(Message "\nThe directory \"${BOOST_CACHE_DIR}\" provided in BOOST_CACHE_DIR doesn't exist.")
@@ -71,25 +74,48 @@ else()
   file(MAKE_DIRECTORY "${BoostCacheDir}")
 endif()
 
-set(BoostDownloadFolder "${BoostFolderName}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_CXX_COMPILER_VERSION}")
+# Set up the full path to the source directory
+set(BoostSourceDir "${BoostFolderName}_${CMAKE_CXX_COMPILER_ID}_${CMAKE_CXX_COMPILER_VERSION}")
 if(HAVE_LIBC++)
-  set(BoostDownloadFolder "${BoostDownloadFolder}_LibCXX")
+  set(BoostSourceDir "${BoostSourceDir}_LibCXX")
 endif()
 if(HAVE_LIBC++ABI)
-  set(BoostDownloadFolder "${BoostDownloadFolder}_LibCXXABI")
+  set(BoostSourceDir "${BoostSourceDir}_LibCXXABI")
 endif()
 if(CMAKE_CL_64)
-  set(BoostDownloadFolder "${BoostDownloadFolder}_Win64")
+  set(BoostSourceDir "${BoostSourceDir}_Win64")
 endif()
-string(REPLACE "." "_" BoostDownloadFolder ${BoostDownloadFolder})
-set(BoostDownloadFolder ${BoostCacheDir}/${BoostDownloadFolder})
+string(REPLACE "." "_" BoostSourceDir ${BoostSourceDir})
+set(BoostSourceDir "${BoostCacheDir}/${BoostSourceDir}")
+
+# Check the full path to the source directory is not too long for Windows.  File paths must be less
+# than MAX_PATH which is 260.  The current longest relative path Boost tries to create is:
+# Build\boost\bin.v2\libs\program_options\build\fd41f4c7d882e24faa6837508d6e5384\libboost_program_options-vc120-mt-gd-1_55.lib.rsp
+# which along with a leading separator is 129 chars in length.  This gives a maximum path available
+# for 'BoostSourceDir' as 130 chars.
+if(WIN32)
+  get_filename_component(BoostSourceDirName "${BoostSourceDir}" NAME)
+  string(LENGTH "/${BoostSourceDirName}" BoostSourceDirNameLengthWithSeparator)
+  math(EXPR AvailableLength 130-${BoostSourceDirNameLengthWithSeparator})
+  string(LENGTH "${BoostSourceDir}" BoostSourceDirLength)
+  if(${BoostSourceDirLength} GREATER 130)
+    set(Msg "\n\nThe path to boost's source is too long to handle all the files which will ")
+    set(Msg "${Msg}be created when boost is built.  To avoid this, set the CMake variable ")
+    set(Msg "${Msg}USE_BOOST_CACHE to ON and set the variable BOOST_CACHE_DIR to a path ")
+    set(Msg "${Msg}which is at most ${AvailableLength} characters long.  For example:\n")
+    set(Msg "${Msg}  mkdir C:\\maidsafe_boost\n")
+    set(Msg "${Msg}  cmake . -DUSE_BOOST_CACHE=ON -DBOOST_CACHE_DIR=C:\\maidsafe_boost\n\n")
+    message(FATAL_ERROR "${Msg}")
+  endif()
+endif()
 
 # Download boost if required
-if(NOT EXISTS "${BoostCacheDir}/${BoostFolderName}.tar.bz2")
+set(ZipFilePath "${BoostCacheDir}/${BoostFolderName}.tar.bz2")
+if(NOT EXISTS ${ZipFilePath})
   message(STATUS "Downloading boost ${BoostVersion} to ${BoostCacheDir}")
 endif()
 file(DOWNLOAD http://sourceforge.net/projects/boost/files/boost/${BoostVersion}/${BoostFolderName}.tar.bz2/download
-     ${BoostCacheDir}/${BoostFolderName}.tar.bz2
+     ${ZipFilePath}
      STATUS Status
      SHOW_PROGRESS
      EXPECTED_HASH SHA1=${BoostSHA1}
@@ -97,24 +123,31 @@ file(DOWNLOAD http://sourceforge.net/projects/boost/files/boost/${BoostVersion}/
 
 # Extract boost if required
 string(FIND "${Status}" "returning early" Found)
-if(Found LESS 0 OR NOT IS_DIRECTORY "${BoostDownloadFolder}")
-  message(STATUS "Extracting boost ${BoostVersion} to ${BoostDownloadFolder}")
-  file(MAKE_DIRECTORY "${BoostDownloadFolder}")
-  execute_process(COMMAND ${CMAKE_COMMAND} -E tar xfz ${BoostCacheDir}/${BoostFolderName}.tar.bz2
-                  WORKING_DIRECTORY ${BoostDownloadFolder}
+if(Found LESS 0 OR NOT IS_DIRECTORY "${BoostSourceDir}")
+  set(BoostExtractFolder "${BoostCacheDir}/boost_unzip")
+  file(REMOVE_RECURSE ${BoostExtractFolder})
+  file(MAKE_DIRECTORY ${BoostExtractFolder})
+  file(COPY ${ZipFilePath} DESTINATION ${BoostExtractFolder})
+  message(STATUS "Extracting boost ${BoostVersion} to ${BoostExtractFolder}")
+  execute_process(COMMAND ${CMAKE_COMMAND} -E tar xfz ${BoostFolderName}.tar.bz2
+                  WORKING_DIRECTORY ${BoostExtractFolder}
                   RESULT_VARIABLE Result
                   )
   if(NOT Result EQUAL 0)
-    message(FATAL_ERROR "Failed extracting boost ${BoostVersion} to ${BoostDownloadFolder}")
+    message(FATAL_ERROR "Failed extracting boost ${BoostVersion} to ${BoostExtractFolder}")
   endif()
+  file(REMOVE ${BoostExtractFolder}/${BoostFolderName}.tar.bz2)
+
+  # Get the path to the extracted folder
+  file(GLOB ExtractedDir "${BoostExtractFolder}/*")
+  list(LENGTH ExtractedDir n)
+  if(NOT n EQUAL 1 OR NOT IS_DIRECTORY ${ExtractedDir})
+    message(FATAL_ERROR "Failed extracting boost ${BoostVersion} to ${BoostExtractFolder}")
+  endif()
+  file(RENAME ${ExtractedDir} ${BoostSourceDir})
+  file(REMOVE_RECURSE ${BoostExtractFolder})
 endif()
 
-# Get the path to the extracted folder
-file(GLOB BoostSourceDir "${BoostDownloadFolder}/*")
-list(LENGTH BoostSourceDir n)
-if(NOT n EQUAL 1 OR NOT IS_DIRECTORY "${BoostSourceDir}")
-  message(FATAL_ERROR "Failed extracting boost ${BoostVersion} to ${BoostDownloadFolder}")
-endif()
 
 # Build b2 (bjam) if required
 unset(b2Path CACHE)
@@ -125,6 +158,11 @@ if(NOT b2Path)
     set(b2Bootstrap "bootstrap.bat")
   else()
     set(b2Bootstrap "./bootstrap.sh")
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+      list(APPEND b2Bootstrap --with-toolset=clang)
+    elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+      list(APPEND b2Bootstrap --with-toolset=gcc)
+    endif()
   endif()
   execute_process(COMMAND ${b2Bootstrap} WORKING_DIRECTORY ${BoostSourceDir}
                   RESULT_VARIABLE Result OUTPUT_VARIABLE Output ERROR_VARIABLE Error)
@@ -133,6 +171,15 @@ if(NOT b2Path)
   endif()
 endif()
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${BoostSourceDir}/Build)
+
+# Apply patched files
+if(NOT "${BoostVersion}" STREQUAL "1.55.0")
+  message(FATAL_ERROR "Remove patched files from the source tree and delete corresponding 'configure_file' commands in this 'add_boost' CMake file.")
+endif()
+configure_file(patches/boost_1_55/boost/atomic/detail/cas128strong.hpp ${BoostSourceDir}/boost/atomic/detail/cas128strong.hpp COPYONLY)
+configure_file(patches/boost_1_55/boost/atomic/detail/gcc-atomic.hpp ${BoostSourceDir}/boost/atomic/detail/gcc-atomic.hpp COPYONLY)
+configure_file(patches/boost_1_55/boost/intrusive/detail/has_member_function_callable_with.hpp ${BoostSourceDir}/boost/intrusive/detail/has_member_function_callable_with.hpp COPYONLY)
+configure_file(patches/boost_1_55/boost/signals2/detail/variadic_slot_invoker.hpp ${BoostSourceDir}/boost/signals2/detail/variadic_slot_invoker.hpp COPYONLY)
 
 # Expose BoostSourceDir to parent scope
 set(BoostSourceDir ${BoostSourceDir} PARENT_SCOPE)
@@ -145,7 +192,14 @@ set(b2Args <SOURCE_DIR>/b2
            --build-dir=Build
            stage
            -d+2
+           --hash
            )
+if("${CMAKE_BUILD_TYPE}" STREQUAL "ReleaseNoInline")
+  list(APPEND b2Args cxxflags="${RELEASENOINLINE_FLAGS}")
+endif()
+if("${CMAKE_BUILD_TYPE}" STREQUAL "DebugLibStdcxx")
+  list(APPEND b2Args define=_GLIBCXX_DEBUG)
+endif()
 
 # Set up platform-specific b2 (bjam) command line arguments
 if(MSVC)
@@ -162,18 +216,21 @@ if(MSVC)
   if(${TargetArchitecture} STREQUAL "x86_64")
     list(APPEND b2Args address-model=64)
   endif()
+elseif(APPLE)
+  list(APPEND b2Args variant=release toolset=clang cxxflags=-fPIC cxxflags=-std=c++11 cxxflags=-stdlib=libc++
+                     linkflags=-stdlib=libc++ architecture=combined address-model=32_64 --layout=tagged)
 elseif(UNIX)
   list(APPEND b2Args variant=release cxxflags=-fPIC cxxflags=-std=c++11 -sNO_BZIP2=1 --layout=tagged)
+  # Need to configure the toolset based on whatever version CMAKE_CXX_COMPILER is
+  string(REGEX MATCH "[0-9]+\\.[0-9]+" ToolsetVer "${CMAKE_CXX_COMPILER_VERSION}")
   if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-    list(APPEND b2Args toolset=clang)
+    list(APPEND b2Args toolset=clang-${ToolsetVer})
     if(HAVE_LIBC++)
       list(APPEND b2Args cxxflags=-stdlib=libc++ linkflags=-stdlib=libc++)
     endif()
   elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
-    list(APPEND b2Args toolset=gcc)
+    list(APPEND b2Args toolset=gcc-${ToolsetVer})
   endif()
-elseif(APPLE)
-  list(APPEND b2Args toolset=clang cxxflags=-fPIC cxxflags=-std=c++11 architecture=combined address-model=32_64 --layout=tagged)
 endif()
 
 # Get list of components
@@ -209,6 +266,7 @@ foreach(Component ${BoostComponents})
                           IMPORTED_LOCATION_MINSIZEREL ${BoostSourceDir}/stage/lib/libboost_${Component}-${CompilerName}-mt-${Version}.lib
                           IMPORTED_LOCATION_RELEASE ${BoostSourceDir}/stage/lib/libboost_${Component}-${CompilerName}-mt-${Version}.lib
                           IMPORTED_LOCATION_RELWITHDEBINFO ${BoostSourceDir}/stage/lib/libboost_${Component}-${CompilerName}-mt-${Version}.lib
+                          IMPORTED_LOCATION_RELEASENOINLINE ${BoostSourceDir}/stage/lib/libboost_${Component}-${CompilerName}-mt-${Version}.lib
                           LINKER_LANGUAGE CXX)
   else()
     set_target_properties(Boost${CamelCaseComponent} PROPERTIES
@@ -227,15 +285,25 @@ foreach(Component ${BoostComponents})
       endif()
       set(Boost${CamelCaseComponent}Libs Boost${CamelCaseComponent} ${IconvLib})
     elseif(UNIX)
-      find_library(Icui18nLib libicui18n.a)
-      find_library(IcuucLib libicuuc.a)
-      find_library(IcudataLib libicudata.a)
-      if(NOT Icui18nLib OR NOT IcuucLib OR NOT IcudataLib)
-        set(Msg "libicui18n.a, libicuuc.a & licudata.a must be installed to a standard location.")
-        set(Msg "  For  ${Msg}Ubuntu/Debian, run\n  sudo apt-get install libicu-dev")
-        message(FATAL_ERROR "${Msg}")
+      if(BSD)
+        find_library(IconvLib libiconv.a)
+        if(NOT IconvLib)
+          set(Msg "libiconv.a must be installed to a standard location.")
+          set(Msg "  For ${Msg} on FreeBSD 10 or later, run\n  pkg install libiconv")
+          message(FATAL_ERROR "${Msg}")
+        endif()
+        set(Boost${CamelCaseComponent}Libs Boost${CamelCaseComponent} ${IconvLib})
+      else()
+        find_library(Icui18nLib libicui18n.a)
+        find_library(IcuucLib libicuuc.a)
+        find_library(IcudataLib libicudata.a)
+        if(NOT Icui18nLib OR NOT IcuucLib OR NOT IcudataLib)
+          set(Msg "libicui18n.a, libicuuc.a & licudata.a must be installed to a standard location.")
+          set(Msg "  For ${Msg} on Ubuntu/Debian, run\n  sudo apt-get install libicu-dev")
+          message(FATAL_ERROR "${Msg}")
+        endif()
+        set(Boost${CamelCaseComponent}Libs Boost${CamelCaseComponent} ${Icui18nLib} ${IcuucLib} ${IcudataLib})
       endif()
-      set(Boost${CamelCaseComponent}Libs Boost${CamelCaseComponent} ${Icui18nLib} ${IcuucLib} ${IcudataLib})
     else()
       set(Boost${CamelCaseComponent}Libs Boost${CamelCaseComponent})
     endif()
@@ -260,9 +328,7 @@ add_dependencies(boost_wave boost_chrono boost_date_time boost_filesystem boost_
 ExternalProject_Add(
     boost_process
     PREFIX ${CMAKE_BINARY_DIR}/boost_process
-    URL http://www.highscore.de/boost/process0.5/process.zip
-    URL_HASH SHA1=281e8575e3593797c94f0230e40c2f0dc49923aa
-    TIMEOUT 30
+    DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     BUILD_IN_SOURCE ON
@@ -279,26 +345,39 @@ ExternalProject_Add(
 ExternalProject_Add_Step(
     boost_process
     copy_boost_process_dir
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/boost/process ${BoostSourceDir}/boost/process
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/third_party_libs/boost_process/boost/process ${BoostSourceDir}/boost/process
     COMMENT "Copying Boost.Process boost dir..."
-    DEPENDEES download
     DEPENDERS configure
     )
 ExternalProject_Add_Step(
     boost_process
     copy_boost_process_hpp
-    COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/boost/process.hpp ${BoostSourceDir}/boost
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/third_party_libs/boost_process/boost/process.hpp ${BoostSourceDir}/boost
     COMMENT "Copying Boost.Process header..."
-    DEPENDEES download
     DEPENDERS configure
     )
 ExternalProject_Add_Step(
     boost_process
     copy_libs_process_dir
-    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/libs/process ${BoostSourceDir}/libs/process
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/third_party_libs/boost_process/libs/process ${BoostSourceDir}/libs/process
     COMMENT "Copying Boost.Process libs dir..."
-    DEPENDEES download
     DEPENDERS configure
     )
 set_target_properties(boost_process PROPERTIES LABELS Boost FOLDER "Third Party/Boost")
 add_dependencies(boost_process boost_system)
+
+
+#==================================================================================================#
+# Package                                                                                          #
+#==================================================================================================#
+if(MSVC)
+  foreach(BoostLib BoostChrono BoostDateTime BoostFilesystem BoostLocale BoostProgramOptions BoostRegex BoostSystem BoostThread)
+    get_target_property(Location ${BoostLib} IMPORTED_LOCATION_DEBUG)
+    install(FILES ${Location} COMPONENT Development CONFIGURATIONS Debug DESTINATION lib)
+    get_target_property(Location ${BoostLib} IMPORTED_LOCATION_RELEASE)
+    install(FILES ${Location} COMPONENT Development CONFIGURATIONS Release DESTINATION lib)
+  endforeach()
+else()
+  install(DIRECTORY ${BoostSourceDir}/stage/lib/ COMPONENT Development CONFIGURATIONS Debug Release DESTINATION lib)
+endif()
+install(DIRECTORY ${BoostSourceDir}/boost COMPONENT Development DESTINATION include/maidsafe/third_party_libs)

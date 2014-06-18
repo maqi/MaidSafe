@@ -78,6 +78,10 @@ set(CamelCaseProjectName ${CurrentCamelCaseProjectName})
 #add_executable(TESTcryptopp ${TESTcryptopp_DIR})
 
 add_library(cryptopp STATIC ${cryptopp_SOURCES} ${cryptopp_HEADERS})
+if(TARGET check_sanitizer_blacklist)
+  add_dependencies(cryptopp check_sanitizer_blacklist)
+endif()
+
 ms_target_include_system_dirs(cryptopp INTERFACE ${PROJECT_SOURCE_DIR}/.. PRIVATE ${PROJECT_SOURCE_DIR})
 if(JustThread_FOUND)
   ms_target_include_system_dirs(cryptopp PUBLIC ${JustThread_INCLUDE_DIR})
@@ -107,7 +111,6 @@ include(../../../cmake_modules/standard_flags.cmake)
 
 target_compile_definitions(cryptopp
   PUBLIC
-    $<$<BOOL:${MSVC}>:CRYPTOPP_DISABLE_SSE2>
     $<$<AND:$<BOOL:${UNIX}>,$<CXX_COMPILER_ID:Clang>>:CRYPTOPP_DISABLE_ASM CRYPTOPP_DISABLE_UNCAUGHT_EXCEPTION>
     $<$<AND:$<BOOL:${JUST_THREAD_DEADLOCK_CHECK}>,$<CONFIG:Debug>>:_JUST_THREAD_DEADLOCK_CHECK>
   PRIVATE
@@ -166,3 +169,15 @@ elseif(MSVC)
   set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/pch.cpp PROPERTIES COMPILE_FLAGS "/Yc\"pch.h\"")
   target_link_libraries(cryptest odbc32.lib odbccp32.lib Ws2_32.lib)
 endif()
+
+
+#==================================================================================================#
+# Package                                                                                          #
+#==================================================================================================#
+install(TARGETS cryptopp COMPONENT Development CONFIGURATIONS Debug Release ARCHIVE DESTINATION lib)
+install(FILES ${cryptopp_HEADERS} COMPONENT Development DESTINATION include/maidsafe/third_party_libs/cryptopp)
+
+install(TARGETS cryptest COMPONENT Tests CONFIGURATIONS Debug RUNTIME DESTINATION bin/debug)
+install(TARGETS cryptest COMPONENT Tests CONFIGURATIONS Release RUNTIME DESTINATION bin)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/TestData ${PROJECT_SOURCE_DIR}/TestVectors COMPONENT Tests CONFIGURATIONS Debug DESTINATION bin/debug)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/TestData ${PROJECT_SOURCE_DIR}/TestVectors COMPONENT Tests CONFIGURATIONS Release DESTINATION bin)

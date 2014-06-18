@@ -34,12 +34,11 @@ from multiprocessing import Process, Pool
 import multiprocessing
 import utils
 import re
-import psutil
 import time
 import datetime
 import random
 import shutil
-import lifestuff_killer
+import vault_killer
 
 processes = {}
 
@@ -65,8 +64,8 @@ def SetupBootstraps(num):
       time.sleep(1)
       processes[3] = work(3)
       if processes[2] and processes[3]:
-        print("Wait 5 secs for bootstrap")
-        time.sleep(5)
+        print("Wait 10 secs for bootstrap")
+        time.sleep(10)
         break
       else:
         proc.kill()
@@ -77,8 +76,8 @@ def SetupBootstraps(num):
     proc.kill()
     return False
   proc.kill()
-  lifestuff_killer.KillVaultKeyHelper()
-  print("Wait 10 secs for bootstrap nodes disappear from routingtable")
+  vault_killer.KillVaultKeyHelper()
+  print("Wait 10 secs for bootstrap nodes disappear from routing table")
   time.sleep(10)
   return True
 
@@ -86,8 +85,7 @@ def SetupBootstraps(num):
 def SetUpNextNode(endpoint, index):
   prog = utils.GetProg('vault')
   log_file = open('vault_' + str(index) + '.txt', 'w')
-  return subprocess.Popen([prog, '--log_no_async', 'true',
-                          '--log_vault', 'V', '--log_nfs', 'V', '--log_*', 'E',
+  return subprocess.Popen([prog, '--log_vault', 'I', '--log_*', 'E',
                           '--peer=' + endpoint.lstrip(),
                           '--disable_ctrl_c=true',
                           '--identity_index=' + str(index),
@@ -98,8 +96,7 @@ def SetUpNextNode(endpoint, index):
 def work(number):
   prog = utils.GetProg('vault')
   log_file = open('vault_' + str(number) + '.txt', 'w')
-  return subprocess.Popen([prog, '--log_no_async', 'true',
-                          '--log_vault', 'V', '--log_nfs', 'V', '--log_*', 'E',
+  return subprocess.Popen([prog, '--log_vault', 'I', '--log_*', 'E',
                           '--disable_ctrl_c=true',
                           '--identity_index=' + str(number),
                           '--chunk_path=.cs' + str(number)],
@@ -126,15 +123,15 @@ def RunBootstrapAndVaultSetup():
   for vault in range(4, num):
     processes[vault]= work(vault)
     print("Vault " + str(vault) + " is starting up ... ")
-    time.sleep(1)
-  print("Wait 5 secs for network")
-  time.sleep(5)
+    time.sleep(2)
+  print("Wait 10 secs for network")
+  time.sleep(10)
   return True
 
 def SaveKeys():
   num_of_keys = 44
   prog = utils.GetProg('vault_key_helper')
-  proc = subprocess.Popen([prog, '-ls', '-k', 10],
+  proc = subprocess.Popen([prog, '-ls', '-k', str(10)],
                           shell = False, stdout = PIPE, stderr = None)
   if utils.TimeOut(utils.LookingFor, (proc, 'PublicPmidKey stored and verified', 50, num_of_keys,),
                    timeout_duration=5*num_of_keys, default=False):
@@ -143,7 +140,7 @@ def SaveKeys():
   else:
     print("failure in storing keys to network")
   proc.kill
-  lifestuff_killer.KillVaultKeyHelper()
+  vault_killer.KillVaultKeyHelper()
 
 def PrintVaultMenu():
   utils.ClearScreen()
@@ -157,12 +154,13 @@ def VaultMenu():
   option = 1
   utils.ResetScreen()
   RunBootstrapAndVaultSetup()
+  print ("========Storing keys =============")
   SaveKeys()
   while(option != 0):
     procs = PrintVaultMenu()
     option = input("Vault Network with 36 nodes established up (0 for quit): ")
     option = int(option)
-  lifestuff_killer.KillLifeStuff()
+  vault_killer.KillLifeStuff()
   processes.clear()
 
 def main():

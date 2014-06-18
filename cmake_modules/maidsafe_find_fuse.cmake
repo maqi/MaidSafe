@@ -22,7 +22,7 @@
 #                                                                                                  #
 #  Module used to locate Filesystem in Userspace (FUSE) lib and header.                            #
 #                                                                                                  #
-#  Settable variables to aid with finding CBFS are:                                                #
+#  Settable variables to aid with finding FUSE are:                                                #
 #    ADD_FUSE_INCLUDE_DIR                                                                          #
 #                                                                                                  #
 #  Variables set and cached by this module are:                                                    #
@@ -47,6 +47,15 @@ if(APPLE)
     set(ERROR_MESSAGE "${ERROR_MESSAGE}  Run\ncmake . -DADD_FUSE_INCLUDE_DIR=<Path to osxfuse include directory>")
     message(FATAL_ERROR ${ERROR_MESSAGE})
   endif()
+elseif(BSD)
+  # FreeBSD 10 and later has fuse built in as standard, but headers may not be installed
+  find_library(Fuse_LIBRARY libfuse.so)
+  find_path(Fuse_INCLUDE_DIR fuse/fuse.h PATHS "/usr/local/include" ${ADD_FUSE_INCLUDE_DIR} NO_DEFAULT_PATH)
+  if(NOT Fuse_INCLUDE_DIR)
+    set(ERROR_MESSAGE "\nCould not find include directory for FUSE.")
+    set(ERROR_MESSAGE "${ERROR_MESSAGE}  Try 'pkg install fusefs-libs'")
+    message(FATAL_ERROR ${ERROR_MESSAGE})
+  endif()
 else()
   find_library(Fuse_LIBRARY libfuse.so)
 endif()
@@ -62,5 +71,5 @@ else()
     set(ERROR_MESSAGE "\nCould not find library libfuse.so.")
     set(ERROR_MESSAGE "${ERROR_MESSAGE}  Run\ncmake . -DADD_LIBRARY_DIR=<Path to libfuse directory>")
   endif()
-  message(FATAL_ERROR {ERROR_MESSAGE})
+  message(FATAL_ERROR ${ERROR_MESSAGE})
 endif()

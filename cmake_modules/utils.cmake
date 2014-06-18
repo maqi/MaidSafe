@@ -28,18 +28,72 @@
 include(add_protoc_command)
 
 
+# Oddly cmake is fairly limited in standard platform defines
+function(extra_platforms)
+  if(UNIX AND NOT APPLE)
+    message(STATUS "This system is called ${CMAKE_SYSTEM_NAME}.")
+    if(CMAKE_SYSTEM_NAME MATCHES ".*Linux")
+      set(LINUX TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "kFreeBSD.*")
+      set(BSD TRUE PARENT_SCOPE)
+      set(FREEBSD TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "kNetBSD.*|NetBSD.*")
+      set(BSD TRUE PARENT_SCOPE)
+      set(NETBSD TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "kOpenBSD.*|OpenBSD.*")
+      set(BSD TRUE PARENT_SCOPE)
+      set(OPENBSD TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES ".*GNU.*")
+      set(GNU TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES ".*BSDI.*")
+      set(BSDI TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "DragonFly.*|FreeBSD")
+      set(BSD TRUE PARENT_SCOPE)
+      set(FREEBSD TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "SYSV5.*")
+      set(SYSV5 TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "Solaris.*")
+      set(SOLARIS TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "HP-UX.*")
+      set(HPUX TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "AIX.*")
+      set(AIX TRUE PARENT_SCOPE)
+    elseif(CMAKE_SYSTEM_NAME MATCHES "Minix.*")
+      set(MINIX TRUE PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
+
 function(ms_check_compiler)
+  # If the path to the CMAKE_CXX_COMPILER doesn't change, CMake doesn't detect a version change
+  # in the compiler.  We cache the output of running the compiler with '--version' and check
+  # on each subsequent configure that the output is identical.  Note, with MSVC the command
+  # fails ('--version' is an unrecognised arg), but still outputs the comiler version.
+  execute_process(COMMAND ${CMAKE_CXX_COMPILER} --version
+                  OUTPUT_VARIABLE OutputVar ERROR_VARIABLE ErrorVar)
+  string(REPLACE "\n" ";" CombinedOutput "${OutputVar}${ErrorVar}")
+  if(CheckCompilerVersion)
+    if(NOT "${CheckCompilerVersion}" STREQUAL "${CombinedOutput}")
+      set(Msg "\n\nThe C++ compiler \"${CMAKE_CXX_COMPILER}\" has changed since the previous run of CMake.")
+      set(Msg "${Msg}  This requires a clean build folder, so either delete all contents from this")
+      set(Msg "${Msg}  folder, or create a new one and run CMake from there.\n\n")
+      message(FATAL_ERROR "${Msg}")
+    endif()
+  else()
+    set(CheckCompilerVersion "${CombinedOutput}" CACHE INTERNAL "")
+  endif()
   if(${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17")  # i.e for MSVC < Visual Studio 11
-      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of Visual Studio less than 11.")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "18")  # i.e for MSVC < Visual Studio 12
+      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of Visual Studio less than 12.")
     endif()
   elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.2")
-      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of Clang less than 3.2")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "3.3")
+      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of Clang less than 3.3")
     endif()
   elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.7")
-      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of GCC less than 4.7")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8")
+      message(FATAL_ERROR "\nIn order to use C++11 features, this library cannot be built using a version of GCC less than 4.8")
     endif()
   endif()
 endfunction()
@@ -79,8 +133,9 @@ function(ms_add_static_library Lib)
     message(AUTHOR_WARNING "${Msg}")
   endif()
   set(AllStaticLibsForCurrentProject ${AllStaticLibsForCurrentProject} ${Lib} PARENT_SCOPE)
+  set(AllStaticLibs ${AllStaticLibs} ${Lib} CACHE INTERNAL "")
   add_library(${Lib} STATIC ${ARGN})
-  set_target_properties(${Lib} PROPERTIES LABELS ${CamelCaseProjectName} FOLDER "MaidSafe/Libraries")
+  set_target_properties(${Lib} PROPERTIES LABELS ${CamelCaseProjectName} FOLDER "MaidSafe/Libraries/${CamelCaseProjectName}")
 endfunction()
 
 
@@ -109,7 +164,7 @@ endfunction()
 
 # Workaround for the Xcode's missing ability to pass -isystem to the compiler.
 function(ms_target_include_system_dirs Target)
-  if(XCODE)
+  if(XCODE OR (UNIX AND NOT ${CMAKE_VERSION} VERSION_LESS 3.0))
     foreach(Arg ${ARGN})
       string(REGEX MATCH "\\$<" IsGeneratorExpression "${Arg}")
       if("${Arg}" STREQUAL "PRIVATE" OR "${Arg}" STREQUAL "PUBLIC" OR "${Arg}" STREQUAL "INTERFACE")
@@ -124,8 +179,8 @@ function(ms_target_include_system_dirs Target)
     target_include_directories(${Target} SYSTEM ${Scope} ${ARGN})
   endif()
 endfunction()
-                                     
-                                     
+
+
 function(ms_add_style_test)
   if(NOT MaidsafeTesting)
     return()
@@ -146,7 +201,7 @@ function(ms_add_style_test)
 endfunction()
 
 
-# Adds two targets to the current project; AllXXX and ExperXXX where XXX is the project name. 
+# Adds two targets to the current project; AllXXX and ExperXXX where XXX is the project name.
 function(ms_add_project_experimental)
   add_custom_target(All${CamelCaseProjectName} DEPENDS ${AllExesForCurrentProject})
   set_target_properties(All${CamelCaseProjectName} PROPERTIES FOLDER "MaidSafe/All")
@@ -155,13 +210,7 @@ function(ms_add_project_experimental)
                    ${CMAKE_CURRENT_BINARY_DIR}/run_experimental_${CTEST_CONFIGURATION_TYPE}.cmake
                    @ONLY)
   endforeach()
-  if(${CamelCaseProjectName} MATCHES "Client")
-    add_custom_target(Exper${CamelCaseProjectName} COMMAND python ${maidsafe_SOURCE_DIR}/tools/run_client_experimental.py ${CMAKE_CTEST_COMMAND} $<CONFIGURATION> ${CMAKE_SOURCE_DIR}/tools/
-                                                   DEPENDS All${CamelCaseProjectName}
-                                                   WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-  else()
-    add_custom_target(Exper${CamelCaseProjectName} COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION> -S ${CMAKE_CURRENT_BINARY_DIR}/run_experimental_$<CONFIGURATION>.cmake -V)
-  endif()
+  add_custom_target(Exper${CamelCaseProjectName} COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION> -S ${CMAKE_CURRENT_BINARY_DIR}/run_experimental_$<CONFIGURATION>.cmake -V)
   set_target_properties(Exper${CamelCaseProjectName} PROPERTIES FOLDER "MaidSafe/Experimentals")
 endfunction()
 
@@ -212,9 +261,10 @@ function(ms_rename_outdated_built_exes)
     file(GLOB_RECURSE BuiltExesMinSizeRel RELATIVE ${CMAKE_BINARY_DIR} "${CMAKE_BINARY_DIR}/MinSizeRel/*.exe")
     file(GLOB_RECURSE BuiltExesRelease RELATIVE ${CMAKE_BINARY_DIR} "${CMAKE_BINARY_DIR}/Release/*.exe")
     file(GLOB_RECURSE BuiltExesRelWithDebInfo RELATIVE ${CMAKE_BINARY_DIR} "${CMAKE_BINARY_DIR}/RelWithDebInfo/*.exe")
-    set(BuiltExes ${BuiltExesDebug} ${BuiltExesBuiltExesMinSizeRel} ${BuiltExesRelease} ${BuiltExesRelWithDebInfo})
+    file(GLOB_RECURSE BuiltExesReleaseNoInline RELATIVE ${CMAKE_BINARY_DIR} "${CMAKE_BINARY_DIR}/ReleaseNoInline/*.exe")
+    set(BuiltExes ${BuiltExesDebug} ${BuiltExesBuiltExesMinSizeRel} ${BuiltExesRelease} ${BuiltExesRelWithDebInfo} ${BuiltExesReleaseNoInline})
   else()
-    if(APPLE)
+    if(APPLE OR BSD)
       execute_process(COMMAND find . -maxdepth 1 -perm +111 -type f
                       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                       OUTPUT_VARIABLE FindResult)
@@ -341,7 +391,24 @@ endfunction()
 
 # Set up CI test scripts
 function(ms_setup_ci_scripts)
-  if(NOT RUNNING_AS_CTEST_SCRIPT)
+  if(RUNNING_AS_CTEST_SCRIPT)
+    return()
+  endif()
+  if(NOT EXISTS "${CMAKE_BINARY_DIR}/ContinuousIntegration")
+    message(STATUS "Cloning git@github.com:maidsafe/ContinuousIntegration")
+    execute_process(COMMAND ${Git_EXECUTABLE} clone git@github.com:maidsafe/ContinuousIntegration
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    RESULT_VARIABLE ResultVar
+                    ERROR_FILE ${CMAKE_BINARY_DIR}/clone_ci_error.txt)
+    if(ResultVar EQUAL 0)
+      file(REMOVE ${CMAKE_BINARY_DIR}/clone_ci_error.txt)
+    else()
+      set(Msg "Failed to clone ContinuousIntegration.  CI test scripts will be unavailable.")
+      set(Msg "${Msg}  See clone_ci_error.txt in the current directory for details of the attempt.")
+      message(STATUS "${Msg}")
+    endif()
+  endif()
+  if(EXISTS "${CMAKE_BINARY_DIR}/ContinuousIntegration")
     ms_get_command_line_args()
     include(${CMAKE_SOURCE_DIR}/cmake_modules/maidsafe_find_git.cmake)
     find_program(HostnameCommand NAMES hostname)
@@ -355,7 +422,7 @@ function(ms_setup_ci_scripts)
       set(MachineType kWindowsVista)
     elseif(${TargetPlatform} STREQUAL "Linux")
       set(MachineType kLinux)
-    elseif(${TargetPlatform} STREQUAL "OSX10.8")
+    elseif(${TargetPlatform} STREQUAL "OSX10.8" OR ${TargetPlatform} STREQUAL "OSX10.9")
       set(MachineType kMac)
     else()
       set(MachineType Unsupported)
@@ -366,13 +433,23 @@ function(ms_setup_ci_scripts)
     else()
       set(UsingMsBuild FALSE)
     endif()
-    foreach(TestConfType Debug Release)
+    file(GLOB CiFiles "${CMAKE_BINARY_DIR}/CI_*.cmake")
+    if(CiFiles)
+      file(REMOVE ${CiFiles})
+    endif()
+    set(TestConfTypes Debug Release)
+    if(NOT NO_UBSAN AND HAVE_UNDEFINED_BEHAVIOR_SANITIZER AND HAVE_FLAG_SANITIZE_BLACKLIST)
+      list(APPEND TestConfTypes Asan Msan Tsan Ubsan)
+    endif()
+    foreach(TestConfType ${TestConfTypes})
       foreach(DashType Experimental Continuous Nightly Weekly)
-	if(${DashType} STREQUAL Weekly)
-	  set(IsWeekly ON)
-	else()
-	  set(IsWeekly OFF)
-	endif()
+        if(${DashType} STREQUAL Weekly)
+          set(IsWeekly ON)
+        else()
+          set(IsWeekly OFF)
+        endif()
+        string(SUBSTRING "#  This script runs the ${DashType} tests on all submodules of MaidSafe in ${TestConfType} mode.                                                                       "
+               0 99 Documentation)
         configure_file(${CMAKE_SOURCE_DIR}/CI.cmake.in ${CMAKE_BINARY_DIR}/CI_${DashType}_${TestConfType}.cmake ESCAPE_QUOTES)
       endforeach()
     endforeach()
@@ -519,7 +596,7 @@ function(ms_get_target_architecture)
     #error cmake_ARCH ppc
     #endif
     #endif
-    
+
     #error cmake_ARCH unknown
     ")
     file(WRITE "${CMAKE_BINARY_DIR}/arch.c" "${archdetect_c_code}")
@@ -707,3 +784,43 @@ function(ms_remove_block_comments CppCode)
   set(${CppCode} "${${CppCode}}" PARENT_SCOPE)
 endfunction()
 
+
+# This creates a folder in the build root named 'temp/<today's date>' and removes any old versions
+# of such folders.  The name of today's folder is set in 'TodaysTempFolder'.  Since the folder is
+# regularly deleted, it should *not* be used for files which are needed at build- or run-time.
+function(ms_get_todays_temp_folder)
+  string(TIMESTAMP TempFolderName "${CMAKE_BINARY_DIR}/Temp/%d%m%y")
+  set(TodaysTempFolder "${TempFolderName}" PARENT_SCOPE)
+  if(NOT EXISTS "${TempFolderName}")
+    file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/Temp")
+    file(MAKE_DIRECTORY "${TempFolderName}")
+    set(Msg "This folder (\"${CMAKE_BINARY_DIR}/Temp\") should only be used\n")
+    set(Msg "${Msg}to store files which are consumed by CMake.\n\n")
+    set(Msg "${Msg}It is cleared out every day when CMake is run, so it is unsuitable for storing\n")
+    set(Msg "${Msg}files which are used at build- or run-time, since reconfiguring (running CMake)\n")
+    set(Msg "${Msg}might delete them.\n")
+    file(WRITE "${CMAKE_BINARY_DIR}/Temp/README.txt" "${Msg}")
+  endif()
+endfunction()
+
+
+# Sets a factor by which all test timeouts are multiplied.  'TimeoutFactor' must be > 1 and need not be an integer.
+function(ms_set_global_test_timeout_factor TimeoutFactor)
+  if(NOT 1 LESS ${TimeoutFactor})
+    message(FATAL_ERROR "'TimeoutFactor' (${TimeoutFactor}) is not > 1")
+  endif()
+  if(GlobalTestTimeoutFactor AND NOT "${TimeoutFactor}" GREATER "${GlobalTestTimeoutFactor}")
+    # We won't decrease the existing factor.
+    return()
+  endif()
+  set(GlobalTestTimeoutFactor ${TimeoutFactor} CACHE INTERNAL "A factor by which all test timeouts are multiplied")
+endfunction()
+
+
+# Applies the global timeout factor if it exists.
+function(ms_update_test_timeout TimeoutVarToBeUpdated)
+  if(GlobalTestTimeoutFactor)
+    math(EXPR NewTimeout ${${TimeoutVarToBeUpdated}}*${GlobalTestTimeoutFactor})
+    set(${TimeoutVarToBeUpdated} ${NewTimeout} PARENT_SCOPE)
+  endif()
+endfunction()
