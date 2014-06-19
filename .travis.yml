@@ -10,7 +10,7 @@ branches:
 
 # Install pre-reqs
 before_install:
-  - export NUM_CPU="`grep processor /proc/cpuinfo | wc -l`"; echo $NUM_CPU
+#  - export NUM_CPU="`grep processor /proc/cpuinfo | wc -l`"; echo $NUM_CPU
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo apt-get clean -qq
   - sudo apt-get update -qq
@@ -29,4 +29,4 @@ before_script:
   - cd build_maidsafe
 
 script: 
-  - make -j$NUM_CPU
+  - make -j4
