@@ -1,6 +1,5 @@
 language: cpp
 compiler:
-  - gcc
   - clang
 
 
@@ -28,3 +27,6 @@ before_script:
   - cmake -HMaidSafe -Bbuild_maidsafe -DCMAKE_BUILD_TYPE=Debug
   - cd build_maidsafe
   - cmake .
+
+script: 
+  - make
