@@ -7,7 +7,7 @@ compiler:
 # whitelist
 branches:
   only:
-    - next
+    - travis 
 
 # Install pre-reqs
 before_install:
