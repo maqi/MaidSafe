@@ -1,30 +1,30 @@
 [submodule "src/api"]
 	path = src/api
-	url = https://github.com/maidsafe/MaidSafe-API.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-API.git
 [submodule "src/common"]
 	path = src/common
-	url = https://github.com/maidsafe/MaidSafe-Common.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Common.git
 [submodule "src/drive"]
 	path = src/drive
-	url = https://github.com/maidsafe/MaidSafe-Drive.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Drive.git
 [submodule "src/encrypt"]
 	path = src/encrypt
-	url = https://github.com/maidsafe/MaidSafe-Encrypt.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Encrypt.git
 [submodule "src/nfs"]
 	path = src/nfs
-	url = https://github.com/maidsafe/MaidSafe-Network-Filesystem.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Network-Filesystem.git
 [submodule "src/passport"]
 	path = src/passport
-	url = https://github.com/maidsafe/MaidSafe-Passport.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Passport.git
 [submodule "src/routing"]
 	path = src/routing
-	url = https://github.com/maidsafe/MaidSafe-Routing.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Routing.git
 [submodule "src/rudp"]
 	path = src/rudp
-	url = https://github.com/maidsafe/MaidSafe-RUDP.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-RUDP.git
 [submodule "src/vault"]
 	path = src/vault
-	url = https://github.com/maidsafe/MaidSafe-Vault.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Vault.git
 [submodule "src/vault_manager"]
 	path = src/vault_manager
-	url = https://github.com/maidsafe/MaidSafe-Vault-Manager.git
+	url = ssh://git@ssh.github.com/maidsafe/MaidSafe-Vault-Manager.git
