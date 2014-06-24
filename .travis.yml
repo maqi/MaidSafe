@@ -10,6 +10,7 @@ branches:
 # Install pre-reqs
 before_install:
 #  - export NUM_CPU="`grep processor /proc/cpuinfo | wc -l`"; echo $NUM_CPU
+  - echo -e "Host ssh.github.com\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
   - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   - sudo apt-get clean -qq
   - sudo apt-get update -qq
