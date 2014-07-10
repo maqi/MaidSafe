@@ -31,15 +31,17 @@ set(AllStaticLibsForCurrentProject sqlite)
 
 ms_add_executable(sqlite_test "." ${PROJECT_SOURCE_DIR}/src/sqlite_test.cc)
 ms_add_executable(speedtest1 "." ${PROJECT_SOURCE_DIR}/src/speedtest1.cc)
+ms_add_executable(speed_test "." ${PROJECT_SOURCE_DIR}/src/speed_test.cc)
 ms_add_executable(wordcount "." ${PROJECT_SOURCE_DIR}/src/wordcount.c)
 
 target_link_libraries(sqlite_test sqlite maidsafe_test ${BoostFilesystemLibs})
 target_link_libraries(speedtest1 sqlite maidsafe_test ${BoostFilesystemLibs})
+target_link_libraries(speed_test sqlite maidsafe_test ${BoostFilesystemLibs})
 target_link_libraries(wordcount sqlite maidsafe_test ${BoostFilesystemLibs})
 
 if(MSVC)
-  set_target_properties(sqlite sqlite_test speedtest1 wordcount PROPERTIES FOLDER "Third Party/SQLite")
-  set(AllExesForCurrentProject sqlite_test speedtest1 wordcount)
+  set_target_properties(sqlite sqlite_test speedtest1 speed_test wordcount PROPERTIES FOLDER "Third Party/SQLite")
+  set(AllExesForCurrentProject sqlite_test speedtest1 speed_test wordcount)
 else()
   ms_add_executable(crashtest1 "." ${PROJECT_SOURCE_DIR}/src/crashtest1.c)
   ms_add_executable(threadtest1 "." ${PROJECT_SOURCE_DIR}/src/threadtest1.c)
@@ -53,13 +55,13 @@ else()
 
   target_include_directories(threadtest3 ${PROJECT_SOURCE_DIR}/src/)
 
-  set_target_properties(sqlite sqlite_test crashtest1 speedtest1 threadtest1 threadtest2 threadtest3 wordcount PROPERTIES FOLDER "Third Party/SQLite")
-  set(AllExesForCurrentProject sqlite_test speedtest1 crashtest1 speedtest1 threadtest1 threadtest2 threadtest3 wordcount)
+  set_target_properties(sqlite sqlite_test crashtest1 speedtest1 speed_test threadtest1 threadtest2 threadtest3 wordcount PROPERTIES FOLDER "Third Party/SQLite")
+  set(AllExesForCurrentProject sqlite_test speedtest1 crashtest1 speedtest1 speed_test threadtest1 threadtest2 threadtest3 wordcount)
 endif()
 
+target_compile_options(speed_test PRIVATE $<$<BOOL:${MSVC}>:/wd4505>)
 add_definitions(-DSQLITE_ENABLE_RTREE)
-
-include(../../../cmake_modules/standard_flags.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake_modules/standard_flags.cmake)
 
 install(TARGETS sqlite COMPONENT Development CONFIGURATIONS Debug Release ARCHIVE DESTINATION lib)
 install(FILES ${PROJECT_SOURCE_DIR}/include/sqlite.h COMPONENT Development DESTINATION include/maidsafe/third_party_libs/sqlite)
