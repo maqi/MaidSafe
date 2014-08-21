@@ -532,6 +532,12 @@ function(ms_setup_ci_scripts)
     endif()
   endif()
   if(EXISTS "${CMAKE_BINARY_DIR}/ContinuousIntegration")
+    # checkout jenkins branch of Continuous Integration repository
+    execute_process(COMMAND ${Git_EXECUTABLE} checkout jenkins
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/ContinuousIntegration/
+                    RESULT_VARIABLE ResultVarJenkins
+                    ERROR_FILE ${CMAKE_BINARY_DIR}/checkout_ci_error_jenkins.txt)
+
     ms_get_command_line_args()
     include(${CMAKE_SOURCE_DIR}/cmake_modules/maidsafe_find_git.cmake)
     find_program(HostnameCommand NAMES hostname)
